@@ -1326,6 +1326,34 @@ export async function resolveSessionFromAuthorization(
   };
 }
 
+/**
+ * Deliberate, operator-opt-in bypass of password verification. This mints a
+ * real session for the platform root account using the exact same
+ * createSession() path as a normal login, so every downstream workspace/
+ * billing/permission check keeps working unchanged. It must stay disabled
+ * unless the operator explicitly sets FANJIN_ENABLE_AUTO_LOGIN=1 — callers
+ * (the HTTP route) are responsible for that gate; this function only
+ * implements the credential-free session issuance itself.
+ */
+export async function autoLoginAsPlatformRoot(
+  knex: Knex,
+  authInfo: RequestAuthInfo = {},
+): Promise<Record<string, unknown>> {
+  const user = await knex<any>("o_user")
+    .whereRaw("lower(role) = ?", ["root"])
+    .andWhere({ status: "active" })
+    .orderBy("id", "asc")
+    .first();
+  if (!user) {
+    throw new AuthError("未找到可用的管理员账号，无法自动登录", 503, { code: "AUTO_LOGIN_UNAVAILABLE" });
+  }
+  const session = await createSession(knex, user, authInfo);
+  return {
+    ...session,
+    security: { mustChangePassword: false },
+  };
+}
+
 export async function loginWithPassword(
   knex: Knex,
   username: string,

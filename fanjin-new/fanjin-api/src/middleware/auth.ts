@@ -16,6 +16,7 @@ import { authenticateAdminMachineRequest, AdminMachineCredentialError } from "@/
 const PUBLIC_API_PATHS = new Set([
   "/api/auth/login",
   "/api/auth/login/mfa",
+  "/api/auth/auto-login",
   "/api/auth/register",
   "/api/auth/invitations/preview",
   "/api/auth/invitations/accept",

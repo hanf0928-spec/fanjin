@@ -71,6 +71,16 @@ export function loginWithMfa(payload: MfaLoginPayload): Promise<LoginResult> {
   return apiPost<LoginResult, MfaLoginPayload>("/auth/login/mfa", payload);
 }
 
+/**
+ * POST /auth/auto-login → 跳过密码校验，直接签发固定管理员会话。
+ * 仅当部署方显式开启 FANJIN_ENABLE_AUTO_LOGIN=1 时后端才会响应，
+ * 否则返回 404，调用方应静默回退到正常登录流程。
+ */
+export function autoLogin(): Promise<LoginResult> {
+  return apiPost<LoginResult, Record<string, never>>("/auth/auto-login", {});
+}
+
+
 export function exchangeTenantTransfer(code: string): Promise<TenantTransferExchangeResult> {
   return apiPost<TenantTransferExchangeResult, { code: string }>("/auth/tenant-transfer/exchange", { code });
 }

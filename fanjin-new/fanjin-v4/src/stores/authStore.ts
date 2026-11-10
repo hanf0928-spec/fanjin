@@ -26,6 +26,11 @@ type AuthState = {
   setToken: (token: string) => void;
   login: (username: string, password: string) => Promise<void>;
   loginWithMfa: (challenge: string, code: string) => Promise<void>;
+  /**
+   * 仅当后端显式开启自动登录（FANJIN_ENABLE_AUTO_LOGIN=1）时才会生效；
+   * 后端未开启则接口 404，这里静默回退，照常走登录页，不影响默认部署。
+   */
+  autoLogin: () => Promise<void>;
   register: (payload: authApi.RegisterPayload) => Promise<void>;
   fetchMe: () => Promise<void>;
   applySession: (session: AuthSession, preferredWorkspaceId?: string | number | null) => void;
@@ -164,6 +169,20 @@ export const useAuthStore = create<AuthState>()(
           throw e;
         } finally {
           set({ loading: false });
+        }
+      },
+
+      autoLogin: async () => {
+        if (get().token) return;
+        set({ loading: true, error: null });
+        try {
+          const result = await authApi.autoLogin();
+          get().setToken(result.token);
+          await get().fetchMe();
+        } catch (e) {
+          // 后端未开启自动登录（404）或暂不可用：保持未登录状态，
+          // 交回正常登录页处理，不阻塞应用启动。
+          set({ bootstrapped: true, loading: false });
         }
       },
 

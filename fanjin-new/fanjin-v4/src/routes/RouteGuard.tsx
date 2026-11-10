@@ -106,6 +106,7 @@ export function RouteGuard({ meta = {}, children }: RouteGuardProps) {
   const location = useLocation();
   const { token, bootstrapped, sessionExpired, error: bootstrapError } = useAuthStore();
   const fetchMe = useAuthStore((s) => s.fetchMe);
+  const autoLogin = useAuthStore((s) => s.autoLogin);
   const logout = useAuthStore((s) => s.logout);
   const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const user = useAuthStore((s) => s.user);
@@ -128,16 +129,23 @@ export function RouteGuard({ meta = {}, children }: RouteGuardProps) {
   const consoleAccess = getConsoleAccess(userRole, workspaceRole, currentWorkspace?.permissions);
 
   useEffect(() => {
-    if (!token || bootstrapped || bootstrapError) {
+    if (bootstrapped || bootstrapError) {
+      setBootstrapIsSlow(false);
+      return;
+    }
+    if (!token && !requiresAuth) {
+      // 公开/仅访客页面不需要等待会话恢复，也不触发自动登录。
       setBootstrapIsSlow(false);
       return;
     }
 
     setBootstrapIsSlow(false);
     const cancelSlowNotice = scheduleRouteGuardSlowNotice(() => setBootstrapIsSlow(true));
-    void fetchMe();
+    // 已有 token 走正常会话恢复；无 token 且该页面需要登录时，
+    // 尝试自动登录（仅部署方显式开启时后端才会响应，否则静默回退登录页）。
+    void (token ? fetchMe() : autoLogin());
     return cancelSlowNotice;
-  }, [token, bootstrapped, bootstrapError, fetchMe]);
+  }, [token, bootstrapped, bootstrapError, requiresAuth, fetchMe, autoLogin]);
 
   // A transient /auth/me failure must never fall through to RBAC with an empty
   // user/workspace. Preserve the token and offer explicit recovery instead.
@@ -175,6 +183,20 @@ export function RouteGuard({ meta = {}, children }: RouteGuardProps) {
         <span className="routeGuardBootstrapStatus">
           <Loader2 className="routeGuardBootstrapIcon" aria-hidden="true" size={20} strokeWidth={1.7} />
           <span>{bootstrapIsSlow ? "网络响应较慢，仍在等待…" : "正在恢复登录会话，请稍候…"}</span>
+        </span>
+      </div>
+    );
+  }
+
+  // 尚无 token 但该页面需要登录：等待一次自动登录尝试的结果，
+  // 避免先闪一下登录页再被自动登录跳转打断。后端未开启自动登录时
+  // autoLogin() 会很快把 bootstrapped 置为 true，正常落到登录页。
+  if (!token && requiresAuth && !bootstrapped) {
+    return (
+      <div className="routeGuardBootstrap" role="status" aria-live="polite" aria-busy="true">
+        <span className="routeGuardBootstrapStatus">
+          <Loader2 className="routeGuardBootstrapIcon" aria-hidden="true" size={20} strokeWidth={1.7} />
+          <span>{bootstrapIsSlow ? "网络响应较慢，仍在等待…" : "正在准备登录会话，请稍候…"}</span>
         </span>
       </div>
     );
